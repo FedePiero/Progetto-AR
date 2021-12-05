@@ -1,0 +1,411 @@
+<!doctype html>
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<title>Progetto AR</title>
+	<script src="lib/JSARToolKit.min.js"></script>
+	<script src="lib/three.min.js"></script>
+	<script src="lib/stats.min.js"></script>
+	<script src="lib/OBJLoader.js"></script>
+	<script>
+		var container = new THREE.Object3D(), scene, ART_detector1, renderer, camera, stats;
+		var meshColonna = new THREE.Mesh(), meshColonna1 = new THREE.Mesh(), meshFerrari = new THREE.Mesh();
+		var loader = new THREE.OBJLoader();
+		var stringFerrari = 'models/ferrari.obj';
+		var stringColonna = 'models/colonna.obj';
+		var multiScalarFerrari = 0.1;
+		var multiScalarColonna = 0.1;
+		var hits = false;
+		var i = 0;
+		var colonna1BB = new THREE.Box3(), colonnaBB = new THREE.Box3(), ferrariBB = new THREE.Box3();
+		var sinistra = false;
+		var destra = false;
+		var latoSx = new THREE.Box3(), latoDx = new THREE.Box3();
+		var time = 0;
+		var plane1, plane2;
+		var punteggio = 0;
+
+		//carica Texture Ferrari
+		var textureFerrari = new THREE.TextureLoader().load('textures/formula1_Texture.png');
+		var materialFerrari = new THREE.MeshBasicMaterial({ map: textureFerrari });
+
+		//carica modello Ferrari
+		loader.load(stringFerrari, function (group) {
+			var geometry = group.children[0].geometry;
+			meshFerrari = new THREE.Mesh(geometry, materialFerrari);
+			meshFerrari.scale.multiplyScalar(multiScalarFerrari);
+			//container.add(meshFerrari);
+			container.add(meshFerrari);
+			meshFerrari.position.set(100, 1, 0);
+			ferrariBB = new THREE.Box3().setFromObject(meshFerrari);
+		});
+
+		//carica Texture Colonna
+		var textureColonna = new THREE.TextureLoader().load('textures/colonna.jpg');
+		var materialColonna = new THREE.MeshBasicMaterial({ map: textureColonna });
+
+		//carica 2 modelli colonne
+		loader.load(stringColonna, function (group) {
+			var geometry = group.children[0].geometry;
+			meshColonna = new THREE.Mesh(geometry, materialColonna);
+			meshColonna.scale.multiplyScalar(multiScalarColonna);
+			//container.add(meshFerrari);
+			container.add(meshColonna);
+			meshColonna.rotation.x = -Math.PI / 2;
+			meshColonna.position.x = -150;
+			meshColonna.position.y = 1;
+			meshColonna.position.z = Math.random() * (50 - (-50)) + (-50);
+			colonnaBB = new THREE.Box3().setFromObject(meshColonna);
+		});
+		loader.load(stringColonna, function (group) {
+			var geometry = group.children[0].geometry;
+			meshColonna1 = new THREE.Mesh(geometry, materialColonna);
+			meshColonna1.scale.multiplyScalar(multiScalarColonna);
+			//container.add(meshFerrari);
+			container.add(meshColonna1);
+			meshColonna1.rotation.x = -Math.PI / 2;
+			meshColonna1.position.x = -150;
+			meshColonna1.position.y = 1;
+			meshColonna1.position.z = Math.random() * (50 - (-50)) + (-50);
+			colonna1BB = new THREE.Box3().setFromObject(meshColonna1);
+		});
+
+		//prende la webcam del PC
+		window.onload = function () {
+			var video = document.getElementById("hiddenVideo");
+			var constraints = { audio: false, video: true };
+			navigator.mediaDevices.getUserMedia(constraints)
+				.then(function (stream) {
+					video.srcObject = stream;
+				})
+				.catch(function (err) {
+					alert(err.name + ": " + err.message);
+					video.src = "marker.webm";
+				});
+			video.onloadedmetadata = start_processing;
+		}
+
+		//permette di utilizzare le frecce direzionali sx e dx della tastiera, per muovere la macchina 
+		function checkKey(e) {
+			e = e || window.event;
+			if (e.keyCode == '37') {
+				sinistra = true;
+			}
+			else if (e.keyCode == '39') {
+				destra = true;
+			}
+		}
+
+		//funzione che permette di muovere la macchina
+		function moveCar() {
+			document.onkeydown = checkKey;
+			if (sinistra == true) {
+				sinistra = false;
+				if (!ferrariBB.isIntersectionBox(latoSx)) {
+					meshFerrari.position.z += 2.0;
+				}
+			}
+			if (destra == true) {
+				destra = false;
+				if (!ferrariBB.isIntersectionBox(latoDx)) {
+					meshFerrari.position.z -= 2.0;
+				}
+			}
+			//si aggiorna la posizione del Bounding box della ferrari
+			ferrariBB = new THREE.Box3().setFromObject(meshFerrari);
+		}
+
+		//funzione che rileva se c'è stato un contatto tra la macchina e una delle due colonne
+		function hit() {
+			if (colonnaBB.isIntersectionBox(ferrariBB))
+				hits = true;
+			if (colonna1BB.isIntersectionBox(ferrariBB))
+				hits = true;
+		}
+
+		//funzione che permette di muovere le colonne
+		function moveColumns() {
+			if (meshColonna.position.x > 150) {
+				i += 0.1;
+				meshColonna.position.x = -150;
+				meshColonna.position.y = 1;
+				meshColonna.position.z = Math.random() * (50 - (-50)) + (-50);
+				punteggio += 1;
+			} else {
+				meshColonna.position.x += 3.0 + i;
+			}
+			if (meshColonna1.position.x > 150) {
+				i += 0.1;
+				meshColonna1.position.x = -150;
+				meshColonna1.position.y = 1;
+				meshColonna1.position.z = Math.random() * (50 - (-50)) + (-50);
+				punteggio += 1;
+			} else {
+				meshColonna1.position.x += 1.0 + i;
+			}
+			//si aggiorna la posizione del Bounding box delle 2 colonne
+			colonnaBB = new THREE.Box3().setFromObject(meshColonna);
+			colonna1BB = new THREE.Box3().setFromObject(meshColonna1);
+		}
+
+		//funzione principale che permette di richiamare le funzioni che muovono la macchina, muovono le colonne e rilevano un contatto
+		function updateGame() {
+			hit();
+			moveCar();
+			moveColumns();
+			//si aggiorna la posizione del Bounding box dei due Piani posti come limitatori a sx e dx della strada
+			latoSx = new THREE.Box3().setFromObject(plane1);
+			latoDx = new THREE.Box3().setFromObject(plane2);
+		}
+
+		//funczione che inizializza la scena
+		function start_processing(event) {
+
+			//setup dei canvas
+			var hvideo = document.getElementById("hiddenVideo");
+			var hcanvas = document.getElementById("hiddenCanvas");
+			var dcanvas = document.getElementById("drawingCanvas");
+			var ocanvas = document.getElementById("outCanvas");
+			hcanvas.width = ocanvas.width = dcanvas.width = hvideo.clientWidth;
+			hcanvas.height = ocanvas.height = dcanvas.height = hvideo.clientHeight;
+			hvideo.style.display = "none";
+			hcanvas.style.display = "none";
+			dcanvas.style.display = "none";
+
+			// setup JSARToolKit
+			var ART_raster = new NyARRgbRaster_Canvas2D(hcanvas);
+			var ART_param = new FLARParam(hcanvas.width, hcanvas.height);
+			ART_detector = new FLARMultiIdMarkerDetector(ART_param, 76);
+			ART_detector.setContinueMode(true);
+
+			// setup three.js
+			renderer = new THREE.WebGLRenderer({ antialias: true, canvas: dcanvas });
+			renderer.outputEncoding = THREE.sRGBEncoding;
+			renderer.autoClear = false;
+
+			//crea un background
+			var bgTexture = new THREE.Texture(hcanvas);
+			bgTexture.minFilter = THREE.LinearFilter;
+			var bgPlane = new THREE.Mesh(
+				new THREE.PlaneGeometry(2, 2),
+				new THREE.MeshBasicMaterial({
+					map: bgTexture,
+					depthTest: false,
+					depthWrite: false
+				})
+			);
+
+			//aggiunge una camera alla scena
+			bgPlane.material.map.encoding = THREE.sRGBEncoding;
+			var bgCamera = new THREE.OrthographicCamera(-1, 1, 1, -1);
+			bgCamera.position.z = 1;
+			var bgScene = new THREE.Scene();
+			bgScene.add(bgPlane);
+			bgScene.add(bgCamera);
+
+			// setup stats.js
+			stats = new Stats();
+			document.body.appendChild(stats.domElement);
+
+			scene = new THREE.Scene();
+			camera = new THREE.Camera();
+			var tmp = new Float32Array(16);
+			ART_param.copyCameraMatrix(tmp, 1, 10000);
+			camera.projectionMatrix = ConvertCameraMatrix(tmp);
+			scene.add(camera);
+
+			// si crea un container
+			container.matrixAutoUpdate = false;
+			scene.add(container);
+
+			// si aggiungono le luci
+			var plight = new THREE.PointLight(0xffffff);
+			plight.position.y = 50;
+			plight.position.z = 80;
+			container.add(plight);
+			var alight = new THREE.AmbientLight(0x0808080);
+			container.add(alight);
+
+			// si aggiunge la strada
+			const geometry = new THREE.PlaneGeometry(100, 300);
+			const texture = new THREE.TextureLoader().load('textures/road.jpeg');
+			const material = new THREE.MeshLambertMaterial({ map: texture, side: THREE.DoubleSide });
+			const plane = new THREE.Mesh(geometry, material);
+			container.add(plane);
+			plane.rotation.x = -Math.PI / 2;
+			plane.rotation.z = -Math.PI / 2;
+
+			// si aggiunge il limitatore a sx
+			const geometry1 = new THREE.PlaneGeometry(100, 300);
+			const materialPlane1 = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide });
+			plane1 = new THREE.Mesh(geometry1, materialPlane1);
+			plane1.rotation.z = -Math.PI / 2;
+			plane1.position.z = 50;
+			latoSx = new THREE.Box3().setFromObject(plane1);
+			container.add(plane1);
+			plane1.visible = false;
+
+			// si aggiunge il limitatore a dx
+			const geometry2 = new THREE.PlaneGeometry(100, 300);
+			const materialPlane2 = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide });
+			plane2 = new THREE.Mesh(geometry2, materialPlane2);
+			plane2.rotation.z = -Math.PI / 2;
+			plane2.position.z = -50;
+			latoDx = new THREE.Box3().setFromObject(plane2);
+			container.add(plane2);
+			plane2.visible = false;
+
+			// funzione ricorsiva per processare i frame
+			setInterval(function () {
+
+				stats.update();
+
+				// aggiorna l'hidden canvas 
+				hcanvas.getContext("2d").drawImage(hvideo, 0, 0, hcanvas.width, hcanvas.height);
+				hcanvas.changed = true;
+				bgTexture.needsUpdate = true;
+				hcanvas.changed = true;
+
+				//disegna il background
+				renderer.autoClear = false;
+				renderer.clear();
+				renderer.render(bgScene, bgCamera);
+
+				//rileva il marker
+				var markerCount = ART_detector.detectMarkerLite(ART_raster, 128);
+
+				//se marker presente
+				if (markerCount > 0) {
+					//continui a giocare
+					if (hits == false) {
+						updateGame();
+					}
+					//hai perso
+					if (hits == true) {
+						alert("Hai ottenuto un punteggio di: " + punteggio + ". \nRicarica la pagina per rigiocare.");
+					}
+					var tmat = new NyARTransMatResult();
+					ART_detector.getTransformMatrix(0, tmat);
+
+					// riposizioniamo gli oggetti dentro il container
+					container.matrix = ConvertMarkerMatrix(tmat);
+					renderer.render(scene, camera);
+				}
+				time += 0.1
+				document.getElementById("punteggio").innerHTML = "Punteggio: " + punteggio;
+
+				ocanvas.getContext("2d").drawImage(dcanvas, 0, 0, dcanvas.width, dcanvas.height);
+			}, 40);
+		}
+
+		// converte la camera projection matrix da JSARToolKit a Three.js 
+		function ConvertCameraMatrix(m) {
+			myMat = new THREE.Matrix4();
+			myMat.set(
+				m[0], m[4], m[8], m[12],
+				-m[1], -m[5], -m[9], -m[13],
+				m[2], m[6], m[10], m[14],
+				m[3], m[7], m[11], m[15]
+			);
+			return myMat;
+		}
+
+		// converte la camera projection matrix da JSARToolKit a Three.js
+		function ConvertMarkerMatrix(m) {
+			myMat = new THREE.Matrix4();
+			myMat.set(
+				m.m00, m.m02, -m.m01, m.m03,
+				m.m10, m.m12, -m.m11, m.m13,
+				m.m20, m.m22, -m.m21, m.m23,
+				0, 0, 0, 1
+			);
+			return myMat;
+		}
+	</script>
+</head>
+
+<body>
+	<style>
+		.parent {
+			display: grid;
+			grid-template-columns: repeat(8, 1fr);
+			grid-template-rows: repeat(9, 1fr);
+			grid-column-gap: 0px;
+			grid-row-gap: 0px;
+		}
+
+		.div1 {
+			grid-area: 2 / 2 / 9 / 8;
+		}
+
+		.div2 {
+			grid-area: 9 / 4 / 10 / 5;
+		}
+
+		.div3 {
+			grid-area: 9 / 5 / 10 / 6;
+		}
+
+		.div4 {
+			grid-area: 4 / 1 / 5 / 2;
+		}
+
+		.div5 {
+			grid-area: 2 / 1 / 3 / 3;
+		}
+
+		canvas {
+			display: block;
+			border: 2px solid black;
+			margin-left: auto;
+			margin-right: auto;
+		}
+
+		button {
+			border: 2px solid black;
+			padding: 15px 32px;
+			display: block;
+			margin-left: auto;
+			margin-right: auto;
+		}
+
+		body {
+			font-family: Monospace;
+			background-color: white;
+			margin: 0px;
+			overflow: hidden;
+		}
+	</style>
+	<div class="parent">
+		<div class="div1">
+			<video autoplay controls id="hiddenVideo"></video>
+			<canvas id="hiddenCanvas"></canvas>
+			<canvas id="drawingCanvas"></canvas>
+			<canvas id="outCanvas"></canvas>
+		</div>
+		<div class="div2">
+			<button id="sx" class="button">
+				sinistra
+			</button>
+		</div>
+		<div class="div3">
+			<button id="dx" class="button">
+				destra
+			</button>
+		</div>
+		<div class="div4">
+			<h3 id="punteggio"></h3>
+		</div>
+		<div class="div5">
+			<h3>Per giocare puoi usare le freccie direzionali sulla tastiera o i bottoni sullo schermo.</h3>
+		</div>
+	</div>
+	<script>
+		//rileva se sono stati premuti i bottoni sullo schermo per muovere la macchina
+		document.getElementById("sx").onclick = function () { sinistra = true; };
+		document.getElementById("dx").onclick = function () { destra = true; };
+	</script>
+</body>
+
+</html>

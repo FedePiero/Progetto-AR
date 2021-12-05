@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link href="css/stile.css" rel="stylesheet" type="text/css">
+    <title>Versione 3 Gioco Macchina</title>
+    <meta charset="utf-8">
+    <script src="lib/Three.min.js"></script>
+    <script src="lib/stats.min.js"></script>
+    <script src="lib/OBJLoader.js"></script>
+    <script src="lib/OrbitControls.js"></script>
+    <style>
+        label {
+            color: white;
+        }
+
+        body {
+            font-family: Monospace;
+            margin: 0px;
+            overflow: hidden;
+        }
+
+        #select {
+            position: absolute;
+            top: 50px;
+            left: 5px;
+        }
+
+        /*
+        .product-pic {
+            width: 60%;
+            height: 70%;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            border: 2px solid black;
+        }*/
+    </style>
+</head>
+
+<body>
+    <div id="select">
+        <button id="sx">sx</button>
+        <button id="dx">dx</button>
+    </div>
+    <script>
+        var renderer, scene, camera, controls, stats;
+        var meshColonna = new THREE.Mesh(), meshColonna1 = new THREE.Mesh(), meshFerrari = new THREE.Mesh();
+        var loader = new THREE.OBJLoader();
+        var stringFerrari = 'models/ferrari.obj';
+        var stringColonna = 'models/colonna.obj';
+        var multiScalarFerrari = 0.1;
+        var multiScalarColonna = 0.1;
+        var hits = false;
+        var i = 0;
+        var colonna1BB = new THREE.Box3(), colonnaBB = new THREE.Box3(), ferrariBB = new THREE.Box3();
+        var sinistra = false;
+        var destra = false;
+        var latoSx = new THREE.Box3(), latoDx = new THREE.Box3();
+
+        var textureFerrari = new THREE.TextureLoader().load('textures/formula1_Texture.png');
+        var materialFerrari = new THREE.MeshBasicMaterial({ map: textureFerrari });
+
+        loader.load(stringFerrari, function (group) {
+            var geometry = group.children[0].geometry;
+            meshFerrari = new THREE.Mesh(geometry, materialFerrari);
+            meshFerrari.scale.multiplyScalar(multiScalarFerrari);
+            //container.add(meshFerrari);
+            scene.add(meshFerrari);
+            meshFerrari.position.set(100, 1, 0);
+            ferrariBB = new THREE.Box3().setFromObject(meshFerrari);
+        });
+        var textureColonna = new THREE.TextureLoader().load('textures/colonna.jpg');
+        var materialColonna = new THREE.MeshBasicMaterial({ map: textureColonna });
+
+        loader.load(stringColonna, function (group) {
+            var geometry = group.children[0].geometry;
+            meshColonna = new THREE.Mesh(geometry, materialColonna);
+            meshColonna.scale.multiplyScalar(multiScalarColonna);
+            //container.add(meshFerrari);
+            scene.add(meshColonna);
+            meshColonna.rotation.x = -Math.PI / 2;
+            meshColonna.position.x = -150;
+            meshColonna.position.y = 1;
+            meshColonna.position.z = Math.random() * (50 - (-50)) + (-50);
+            colonnaBB = new THREE.Box3().setFromObject(meshColonna);
+        });
+        loader.load(stringColonna, function (group) {
+            var geometry = group.children[0].geometry;
+            meshColonna1 = new THREE.Mesh(geometry, materialColonna);
+            meshColonna1.scale.multiplyScalar(multiScalarColonna);
+            //container.add(meshFerrari);
+            scene.add(meshColonna1);
+            meshColonna1.rotation.x = -Math.PI / 2;
+            meshColonna1.position.x = -150;
+            meshColonna1.position.y = 1;
+            meshColonna1.position.z = Math.random() * (50 - (-50)) + (-50);
+            colonna1BB = new THREE.Box3().setFromObject(meshColonna1);
+        });
+
+        function Start() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                toneMapping: THREE.ACESFilmicToneMapping,
+                //porta una gamma correction 
+                encoding: THREE.GammaEncoding
+            });
+            //impostazione grandezza canvas
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            //impostazione a colore background in grigio scuro
+            renderer.setClearColor(0x404040);
+            //creazione canvas
+            document.body.appendChild(renderer.domElement);
+            camera.position.set(200, 50, 0);
+
+            //aggiunta luci
+            var plight = new THREE.PointLight(0xffffff);
+            plight.position.y = 50;
+            plight.position.z = 80;
+            scene.add(plight);
+            var alight = new THREE.AmbientLight(0x0808080);
+            scene.add(alight);
+            stats = new Stats();
+            document.body.appendChild(stats.domElement);
+            controls = new THREE.OrbitControls(camera);
+            controls.addEventListener('change', Render, { passive: false });
+
+            const geometry = new THREE.PlaneGeometry(100, 300);
+            const texture = new THREE.TextureLoader().load('textures/road.jpeg');
+            const material = new THREE.MeshLambertMaterial({ map: texture, side: THREE.DoubleSide });
+            const plane = new THREE.Mesh(geometry, material);
+            scene.add(plane);
+            plane.rotation.x = -Math.PI / 2;
+            plane.rotation.z = -Math.PI / 2;
+
+            const geometry1 = new THREE.PlaneGeometry(100, 300);
+            const materialPlane1 = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide });
+            const plane1 = new THREE.Mesh(geometry1, materialPlane1);
+            plane1.rotation.z = -Math.PI / 2;
+            plane1.position.z = 50;
+            latoSx = new THREE.Box3().setFromObject(plane1);
+            scene.add(plane1);
+            plane1.visible = false;
+
+            const geometry2 = new THREE.PlaneGeometry(100, 300);
+            const materialPlane2 = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide });
+            const plane2 = new THREE.Mesh(geometry2, materialPlane2);
+            plane2.rotation.z = -Math.PI / 2;
+            plane2.position.z = -50;
+            latoDx = new THREE.Box3().setFromObject(plane2);
+            scene.add(plane2);
+            plane2.visible = false;
+
+            const axesHelper = new THREE.AxesHelper(300);
+            scene.add(axesHelper);
+        }
+
+        function updateGame() {
+            hit();
+            moveCar();
+            if (meshColonna.position.x > 150) {
+                i += 0.05;
+                meshColonna.position.x = -150;
+                meshColonna.position.y = 1;
+                meshColonna.position.z = Math.random() * (50 - (-50)) + (-50);
+            } else {
+                meshColonna.position.x += 3.0 + i;
+            }
+            if (meshColonna1.position.x > 150) {
+                i += 0.05;
+                meshColonna1.position.x = -150;
+                meshColonna1.position.y = 1;
+                meshColonna1.position.z = Math.random() * (50 - (-50)) + (-50);
+            } else {
+                meshColonna1.position.x += 1.0 + i;
+            }
+            colonnaBB = new THREE.Box3().setFromObject(meshColonna);
+            colonna1BB = new THREE.Box3().setFromObject(meshColonna1);
+        }
+
+        function moveCar() {
+            document.onkeydown = checkKey;
+            if (sinistra == true) {
+                sinistra = false;
+                if (!ferrariBB.isIntersectionBox(latoSx)) {
+                    meshFerrari.position.z += 1.5;
+                }
+            }
+            if (destra == true) {
+                destra = false;
+                if (!ferrariBB.isIntersectionBox(latoDx)) {
+                    meshFerrari.position.z -= 1.5;
+                }
+            }
+            ferrariBB = new THREE.Box3().setFromObject(meshFerrari);
+        }
+
+        function hit() {
+            if (colonnaBB.isIntersectionBox(ferrariBB))
+                hits = true;
+            if (colonna1BB.isIntersectionBox(ferrariBB))
+                hits = true;
+        }
+
+        function checkKey(e) {
+
+            e = e || window.event;
+
+            if (e.keyCode == '37') {
+                sinistra = true;
+            }
+            else if (e.keyCode == '39') {
+                destra = true;
+            }
+
+        }
+
+        function Update() {
+            requestAnimationFrame(Update);
+            controls.update();
+            stats.update();
+            if (hits == false) {
+                updateGame();
+            }
+            Render();
+
+        }
+
+        function Render() {
+            renderer.render(scene, camera);
+        }
+
+        Start();
+        Update();
+
+        document.getElementById("sx").onclick = function () { sinistra = true; };
+        document.getElementById("dx").onclick = function () { destra = true; };
+    </script>
+</body>
+
+</html>
